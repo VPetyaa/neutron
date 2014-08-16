@@ -35,7 +35,7 @@ OPTS = [
     cfg.MultiStrOpt(
         'device_driver',
         default=['neutron.services.loadbalancer.drivers'
-                 '.haproxy.namespace_driver.HaproxyNSDriver'],
+                 '.zorp.driver.ZorpNSDriver'],
         help=_('Drivers used to manage loadbalancing devices'),
     ),
 ]
