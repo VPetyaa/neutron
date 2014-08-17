@@ -1,0 +1,105 @@
+Zorp LBaas Driver Howto
+    Author: Peter Voros
+
+----------------
+-- INSTALLING --
+----------------
+
+ * Install OpenSuse 13.1 or Ubuntu server 14.04 to a virtual machine
+
+ * Clone devstack (git clone https://github.com/openstack-dev/devstack.git)
+
+ * Edit devstack/stackrc
+   - Change NEUTRON_REPO=${NEUTRON_REPO:-${GIT_BASE}/openstack/neutron.git} to NEUTRON_REPO=https://github.com/VPetyaa/neutron.git
+
+ * Write into devstack/local.conf: (if the file does not exists create it)
+   [[local|localrc]]
+   disable_service n-net
+   enable_service q-svc
+   enable_service q-agt
+   enable_service q-dhcp
+   enable_service q-l3 
+   enable_service q-meta
+   enable_service neutron
+   # Optional, to enable tempest configuration as part of devstack
+   enable_service tempest
+   enable_service q-lbaas
+
+ * Start the stack: (cd devstack; ./stack.sh)
+   - Fill the fields as you wish
+
+ * Edit /etc/neutron/neutron.conf
+   - Search for this line:
+       service_provider=LOADBALANCER:Haproxy:neutron.services.loadbalancer.drivers.haproxy.plugin_driver.HaproxyOnHostPluginDriver:default
+   - Change it to:
+       service_provider=LOADBALANCER:Zorp:neutron.services.loadbalancer.drivers.zorp.plugin_driver.ZorpOnHostPluginDriver:default
+
+ * Install Zorp
+   - If using OpenSuse: zypper ar http://download.opensuse.org/repositories/home:/VPetya:/zorp/openSUSE_13.1/ zorp
+   - OR IF USING Ubuntu: Add a line to /etc/apt/sources.list
+       deb http://download.opensuse.org/repositories/home:/VPetya:/zorp/xUbuntu_14.04/ ./
+   - sudo apt-get update
+   - sudo apt-get install zorp zorp-modules
+   - create a file /tmp/zones.py with
+      from Zorp.Core import *
+      from Zorp.Zone import *
+      InetZone("internet", "0.0.0.0/0")
+
+ * Rejoin stack (./rejoin-stack.sh)
+   - Now list all the screens with (CTRL + SHIFT + a,  ")
+   - Navigate to q-svrc which is screen 6 in my machine (CTRL + SHIFT + a,  6)
+     . terminate it, and restart the last command (CTRL + C, UP, ENTER)
+   - Navigate to q-lbaas
+     . terminate it
+     . create a file /tmp/policy.xml and write in "<policy />"
+     . restart the lbaas (UP, ENTER)
+
+ * Now everything is ready to use
+
+-------------
+-- TESTING --
+-------------
+
+ * Open the machine IP from a browser, and set up a test enviroment
+   - Log in with: demo user
+   - Compute/Instances: Launch Instance
+     . Zone: nova
+     . Name: anything
+     . Flavor: m1.nano
+     . Count: 4
+     . Boot from image: cirros
+   - Associate new floating IP to every node
+   - Compute/Access & Security: Add rule
+     . add AllTCP ENGRES/INGRES
+   - Choose 3 from the nodes and run this command on each of them USER: cirros PASS: cubswin:)
+     . while true; do echo -e 'HTTP/1.0 200 ID OF NODE\r\n\r\n<servername>' | sudo nc -l -p 80 ; done 
+   - Network/Load Blancers/Pools: Add Pool
+     . Name: any
+     . Desc: any
+     . Provider: zorp
+     . Subnet: 10.0.0.0/24
+     . Protocol: HTTP
+     . Load Balancing Method: ROUND_ROBIN
+   - Network/Load Blancers/Members: Add member
+     . Pool: name before
+     . Source: active instances
+     . Members: choose 3
+     . Weight: 10
+     . Protocol Port: 80
+   - Network/Load Blancers/Pools: More/Add VIP
+     . VIP Subnet: 10.0.0.0/24
+     . Address: 10.0.0.111
+     . Port: 10080
+     . Protocol: HTTP
+     . Session Persistance: SOURCE_IP
+     . Connection Limit: 100
+   - SSH to the 4. node run this command several times to check that different response comes from different servers
+     . nc 10.0.0.111 10080 
+
+---------------------
+-- PREINSTALLED VM --
+---------------------
+
+You can also download a preinstalled virtualbox image from:
+ - https://db.tt/J3bM1qWh
+
